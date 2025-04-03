@@ -18,8 +18,8 @@ RUN docker-php-ext-install mbstring
 RUN pecl install xdebug \
     && docker-php-ext-enable xdebug
 
-# Configure Xdebug
-RUN echo "xdebug.mode=coverage" >> /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini
+# Copy Xdebug configuration
+COPY docker/php/xdebug.ini /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini
 
 # Get latest Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
@@ -31,7 +31,7 @@ WORKDIR /var/www/html
 COPY composer.json .
 
 # Install dependencies
-#RUN composer install
+RUN composer install
 
 # Copy existing application directory
 COPY . .

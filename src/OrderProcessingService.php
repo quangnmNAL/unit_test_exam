@@ -22,7 +22,7 @@ class OrderProcessingService
         $this->typeCProcessor = new TypeCOrderProcessor();
     }
 
-    public function processOrders(int $userId)
+    public function processOrders(int $userId): array
     {
         $orders = $this->dbService->getOrdersByUser($userId);
 

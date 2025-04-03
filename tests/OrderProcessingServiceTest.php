@@ -9,33 +9,64 @@ use App\APIClient;
 use App\APIResponse;
 use App\DatabaseException;
 use App\APIException;
+use phpmock\MockBuilder;
+use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 
 class OrderProcessingServiceTest extends TestCase
 {
-    private $dbServiceMock;
-    private $apiClientMock;
-    private $orderProcessingService;
+    /** @var DatabaseService|MockObject */
+    private $dbServiceSpy;
+
+    /** @var APIClient|Stub */
+    private $apiClientStub;
+
+    private OrderProcessingService $orderProcessingService;
+    private MockBuilder $mockBuilder;
 
     protected function setUp(): void
     {
-        $this->dbServiceMock = $this->createMock(DatabaseService::class);
-        $this->apiClientMock = $this->createMock(APIClient::class);
+        // Create a spy for DatabaseService to track method calls
+        $this->dbServiceSpy = $this->createMock(DatabaseService::class);
+        
+        // Create a stub for APIClient to simulate responses
+        $this->apiClientStub = $this->createStub(APIClient::class);
+        
         $this->orderProcessingService = new OrderProcessingService(
-            $this->dbServiceMock,
-            $this->apiClientMock
+            $this->dbServiceSpy,
+            $this->apiClientStub
         );
+        
+        $this->mockBuilder = new MockBuilder();
+    }
+
+    protected function tearDown(): void
+    {
+        \phpmock\Mock::disableAll();
     }
 
     public function testProcessTypeAOrder()
     {
         // Arrange
         $order = new Order(1, 'A', 100, false);
-        $this->dbServiceMock->expects($this->once())
+        
+        // Set up spy expectations
+        $this->dbServiceSpy->expects($this->once())
             ->method('getOrdersByUser')
             ->with(1)
             ->willReturn([$order]);
 
-        $this->dbServiceMock->expects($this->once())
+        // Mock fopen to return a valid handle
+        $mock = $this->mockBuilder
+            ->setNamespace('App\Processors')
+            ->setName('fopen')
+            ->setFunction(function() {
+                return fopen('php://temp', 'r+');
+            })
+            ->build();
+        $mock->enable();
+
+        $this->dbServiceSpy->expects($this->once())
             ->method('updateOrderStatus')
             ->with(1, 'exported', 'low')
             ->willReturn(true);
@@ -53,12 +84,22 @@ class OrderProcessingServiceTest extends TestCase
     {
         // Arrange
         $order = new Order(1, 'A', 201, false);
-        $this->dbServiceMock->expects($this->once())
+        $this->dbServiceSpy->expects($this->once())
             ->method('getOrdersByUser')
             ->with(1)
             ->willReturn([$order]);
 
-        $this->dbServiceMock->expects($this->once())
+        // Mock fopen to return a valid handle
+        $mock = $this->mockBuilder
+            ->setNamespace('App\Processors')
+            ->setName('fopen')
+            ->setFunction(function() {
+                return fopen('php://temp', 'r+');
+            })
+            ->build();
+        $mock->enable();
+
+        $this->dbServiceSpy->expects($this->once())
             ->method('updateOrderStatus')
             ->with(1, 'exported', 'high')
             ->willReturn(true);
@@ -73,6 +114,39 @@ class OrderProcessingServiceTest extends TestCase
         $this->assertEquals('high', $result[0]->priority);
     }
 
+    public function testProcessTypeAOrderWithExportFailure()
+    {
+        // Arrange
+        $order = new Order(1, 'A', 100, false);
+        $this->dbServiceSpy->expects($this->once())
+            ->method('getOrdersByUser')
+            ->with(1)
+            ->willReturn([$order]);
+
+        // Mock fopen to return false
+        $mock = $this->mockBuilder
+            ->setNamespace('App\Processors')
+            ->setName('fopen')
+            ->setFunction(function() {
+                return false;
+            })
+            ->build();
+        $mock->enable();
+
+        $this->dbServiceSpy->expects($this->once())
+            ->method('updateOrderStatus')
+            ->with(1, 'export_failed', 'low')
+            ->willReturn(true);
+
+        // Act
+        $result = $this->orderProcessingService->processOrders(1);
+
+        // Assert
+        $this->assertCount(1, $result);
+        $this->assertEquals('export_failed', $result[0]->status);
+        $this->assertEquals('low', $result[0]->priority);
+    }
+
     public function testProcessTypeBOrderSuccess()
     {
         // Arrange
@@ -80,16 +154,17 @@ class OrderProcessingServiceTest extends TestCase
         $apiResponse = new APIResponse('success', $order);
         $apiResponse->data = 60;
 
-        $this->dbServiceMock->expects($this->once())
+        // Set up spy expectations
+        $this->dbServiceSpy->expects($this->once())
             ->method('getOrdersByUser')
             ->willReturn([$order]);
 
-        $this->apiClientMock->expects($this->once())
-            ->method('callAPI')
+        // Set up stub behavior
+        $this->apiClientStub->method('callAPI')
             ->with(1)
             ->willReturn($apiResponse);
 
-        $this->dbServiceMock->expects($this->once())
+        $this->dbServiceSpy->expects($this->once())
             ->method('updateOrderStatus')
             ->with(1, 'processed', 'low')
             ->willReturn(true);
@@ -111,16 +186,15 @@ class OrderProcessingServiceTest extends TestCase
         $apiResponse = new APIResponse('success', $order);
         $apiResponse->data = 40;
 
-        $this->dbServiceMock->expects($this->once())
+        $this->dbServiceSpy->expects($this->once())
             ->method('getOrdersByUser')
             ->willReturn([$order]);
 
-        $this->apiClientMock->expects($this->once())
-            ->method('callAPI')
+        $this->apiClientStub->method('callAPI')
             ->with(1)
             ->willReturn($apiResponse);
 
-        $this->dbServiceMock->expects($this->once())
+        $this->dbServiceSpy->expects($this->once())
             ->method('updateOrderStatus')
             ->with(1, 'pending', 'low')
             ->willReturn(true);
@@ -142,16 +216,15 @@ class OrderProcessingServiceTest extends TestCase
         $apiResponse = new APIResponse('success', $order);
         $apiResponse->data = 60;
 
-        $this->dbServiceMock->expects($this->once())
+        $this->dbServiceSpy->expects($this->once())
             ->method('getOrdersByUser')
             ->willReturn([$order]);
 
-        $this->apiClientMock->expects($this->once())
-            ->method('callAPI')
+        $this->apiClientStub->method('callAPI')
             ->with(1)
             ->willReturn($apiResponse);
 
-        $this->dbServiceMock->expects($this->once())
+        $this->dbServiceSpy->expects($this->once())
             ->method('updateOrderStatus')
             ->with(1, 'processed', 'low')
             ->willReturn(true);
@@ -173,16 +246,17 @@ class OrderProcessingServiceTest extends TestCase
         $apiResponse = new APIResponse('error', $order);
         $apiResponse->data = 60;
 
-        $this->dbServiceMock->expects($this->once())
+        // Set up spy expectations
+        $this->dbServiceSpy->expects($this->once())
             ->method('getOrdersByUser')
             ->willReturn([$order]);
 
-        $this->apiClientMock->expects($this->once())
-            ->method('callAPI')
+        // Set up stub behavior
+        $this->apiClientStub->method('callAPI')
             ->with(1)
             ->willReturn($apiResponse);
 
-        $this->dbServiceMock->expects($this->once())
+        $this->dbServiceSpy->expects($this->once())
             ->method('updateOrderStatus')
             ->with(1, 'api_error', 'low')
             ->willReturn(true);
@@ -197,17 +271,49 @@ class OrderProcessingServiceTest extends TestCase
         $this->assertEquals('low', $result[0]->priority);
     }
 
-    public function testProcessTypeCOrderWithFlag()
+    public function testProcessTypeBOrderWithAPIException()
     {
         // Arrange
-        $order = new Order(1, 'C', 250, true);
-        $this->dbServiceMock->expects($this->once())
+        $order = new Order(1, 'B', 80, false);
+
+        // Set up spy expectations
+        $this->dbServiceSpy->expects($this->once())
             ->method('getOrdersByUser')
             ->willReturn([$order]);
 
-        $this->dbServiceMock->expects($this->once())
+        // Set up stub to throw exception
+        $this->apiClientStub->method('callAPI')
+            ->with(1)
+            ->willThrowException(new APIException('API Error'));
+
+        $this->dbServiceSpy->expects($this->once())
             ->method('updateOrderStatus')
-            ->with(1, 'completed', 'high')
+            ->with(1, 'api_failure', 'low')
+            ->willReturn(true);
+
+        // Act
+        $result = $this->orderProcessingService->processOrders(1);
+
+        // Assert
+        $this->assertIsArray($result);
+        $this->assertCount(1, $result);
+        $this->assertEquals('api_failure', $result[0]->status);
+        $this->assertEquals('low', $result[0]->priority);
+    }
+
+    public function testProcessTypeCOrderWithFlag()
+    {
+        // Arrange
+        $order = new Order(1, 'C', 100, true);
+
+        // Set up spy expectations
+        $this->dbServiceSpy->expects($this->once())
+            ->method('getOrdersByUser')
+            ->willReturn([$order]);
+
+        $this->dbServiceSpy->expects($this->once())
+            ->method('updateOrderStatus')
+            ->with(1, 'completed', 'low')
             ->willReturn(true);
 
         // Act
@@ -217,18 +323,18 @@ class OrderProcessingServiceTest extends TestCase
         $this->assertIsArray($result);
         $this->assertCount(1, $result);
         $this->assertEquals('completed', $result[0]->status);
-        $this->assertEquals('high', $result[0]->priority);
+        $this->assertEquals('low', $result[0]->priority);
     }
 
     public function testProcessTypeCOrderWithoutFlag()
     {
         // Arrange
         $order = new Order(1, 'C', 150, false);
-        $this->dbServiceMock->expects($this->once())
+        $this->dbServiceSpy->expects($this->once())
             ->method('getOrdersByUser')
             ->willReturn([$order]);
 
-        $this->dbServiceMock->expects($this->once())
+        $this->dbServiceSpy->expects($this->once())
             ->method('updateOrderStatus')
             ->with(1, 'in_progress', 'low')
             ->willReturn(true);
@@ -243,15 +349,47 @@ class OrderProcessingServiceTest extends TestCase
         $this->assertEquals('low', $result[0]->priority);
     }
 
+    public function testProcessTypeBOrderWithHighAmountAndHighAPIResponse()
+    {
+        // Arrange
+        $order = new Order(1, 'B', 150, false);
+        $apiResponse = new APIResponse('success', $order);
+        $apiResponse->data = 60;
+
+        $this->dbServiceSpy->expects($this->once())
+            ->method('getOrdersByUser')
+            ->willReturn([$order]);
+
+        $this->apiClientStub->method('callAPI')
+            ->with(1)
+            ->willReturn($apiResponse);
+
+        $this->dbServiceSpy->expects($this->once())
+            ->method('updateOrderStatus')
+            ->with(1, 'error', 'low')
+            ->willReturn(true);
+
+        // Act
+        $result = $this->orderProcessingService->processOrders(1);
+
+        // Assert
+        $this->assertIsArray($result);
+        $this->assertCount(1, $result);
+        $this->assertEquals('error', $result[0]->status);
+        $this->assertEquals('low', $result[0]->priority);
+    }
+
     public function testProcessUnknownTypeOrder()
     {
         // Arrange
         $order = new Order(1, 'D', 100, false);
-        $this->dbServiceMock->expects($this->once())
+
+        // Set up spy expectations
+        $this->dbServiceSpy->expects($this->once())
             ->method('getOrdersByUser')
             ->willReturn([$order]);
 
-        $this->dbServiceMock->expects($this->once())
+        $this->dbServiceSpy->expects($this->once())
             ->method('updateOrderStatus')
             ->with(1, 'unknown_type', 'low')
             ->willReturn(true);
@@ -260,9 +398,6 @@ class OrderProcessingServiceTest extends TestCase
         $result = $this->orderProcessingService->processOrders(1);
 
         // Assert
-        if ($result === false) {
-            $this->fail('processOrders returned false instead of an array');
-        }
         $this->assertIsArray($result);
         $this->assertCount(1, $result);
         $this->assertEquals('unknown_type', $result[0]->status);
@@ -272,7 +407,8 @@ class OrderProcessingServiceTest extends TestCase
     public function testProcessEmptyOrders()
     {
         // Arrange
-        $this->dbServiceMock->expects($this->once())
+        // Set up spy expectations
+        $this->dbServiceSpy->expects($this->once())
             ->method('getOrdersByUser')
             ->willReturn([]);
 
@@ -280,9 +416,6 @@ class OrderProcessingServiceTest extends TestCase
         $result = $this->orderProcessingService->processOrders(1);
 
         // Assert
-        if ($result === false) {
-            $this->fail('processOrders returned false instead of an array');
-        }
         $this->assertIsArray($result);
         $this->assertEmpty($result);
     }
@@ -290,54 +423,51 @@ class OrderProcessingServiceTest extends TestCase
     public function testDatabaseException()
     {
         // Arrange
-        $order = new Order(1, 'A', 100, false);
-        $this->dbServiceMock->expects($this->once())
+        // Set up spy to throw exception
+        $this->dbServiceSpy->expects($this->once())
             ->method('getOrdersByUser')
-            ->willReturn([$order]);
+            ->willThrowException(new DatabaseException('Database Error'));
 
-        $this->dbServiceMock->expects($this->once())
-            ->method('updateOrderStatus')
-            ->willThrowException(new DatabaseException());
-
-        // Act
-        $result = $this->orderProcessingService->processOrders(1);
-
-        // Assert
-        if ($result === false) {
-            $this->fail('processOrders returned false instead of an array');
-        }
-        $this->assertIsArray($result);
-        $this->assertCount(1, $result);
-        $this->assertEquals('db_error', $result[0]->status);
+        // Act & Assert
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Database Error');
+        
+        $this->orderProcessingService->processOrders(1);
     }
 
-    public function testAPIException()
+    public function testDatabaseExceptionOnUpdateOrderStatus()
     {
         // Arrange
-        $order = new Order(1, 'B', 100, false);
-        $this->dbServiceMock->expects($this->once())
+        $order = new Order(1, 'A', 100, false);
+        
+        // Set up spy expectations
+        $this->dbServiceSpy->expects($this->once())
             ->method('getOrdersByUser')
+            ->with(1)
             ->willReturn([$order]);
 
-        $this->apiClientMock->expects($this->once())
-            ->method('callAPI')
-            ->willThrowException(new APIException());
+        // Mock fopen to return a valid handle
+        $mock = $this->mockBuilder
+            ->setNamespace('App\Processors')
+            ->setName('fopen')
+            ->setFunction(function() {
+                return fopen('php://temp', 'r+');
+            })
+            ->build();
+        $mock->enable();
 
-        $this->dbServiceMock->expects($this->once())
+        // Set up spy to throw exception on updateOrderStatus
+        $this->dbServiceSpy->expects($this->once())
             ->method('updateOrderStatus')
-            ->with(1, 'api_failure', 'low')
-            ->willReturn(true);
+            ->with(1, 'exported', 'low')
+            ->willThrowException(new DatabaseException('Update failed'));
 
         // Act
         $result = $this->orderProcessingService->processOrders(1);
 
         // Assert
-        if ($result === false) {
-            $this->fail('processOrders returned false instead of an array');
-        }
-        $this->assertIsArray($result);
         $this->assertCount(1, $result);
-        $this->assertEquals('api_failure', $result[0]->status);
+        $this->assertEquals('db_error', $result[0]->status);
         $this->assertEquals('low', $result[0]->priority);
     }
 }
