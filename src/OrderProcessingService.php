@@ -1,15 +1,25 @@
 <?php
 namespace App;
 
+use App\Processors\TypeAOrderProcessor;
+use App\Processors\TypeBOrderProcessor;
+use App\Processors\TypeCOrderProcessor;
+
 class OrderProcessingService
 {
     private $dbService;
     private $apiClient;
+    private $typeAProcessor;
+    private $typeBProcessor;
+    private $typeCProcessor;
 
     public function __construct(DatabaseService $dbService, APIClient $apiClient)
     {
         $this->dbService = $dbService;
         $this->apiClient = $apiClient;
+        $this->typeAProcessor = new TypeAOrderProcessor();
+        $this->typeBProcessor = new TypeBOrderProcessor($apiClient);
+        $this->typeCProcessor = new TypeCOrderProcessor();
     }
 
     public function processOrders(int $userId)
@@ -17,85 +27,47 @@ class OrderProcessingService
         $orders = $this->dbService->getOrdersByUser($userId);
 
         foreach ($orders as $order) {
-            // Set priority first based on amount
-            if ($order->amount > 200) {
-                $order->priority = 'high';
-            } else {
-                $order->priority = 'low';
-            }
-
-            switch ($order->type) {
-                case 'A':
-                    $csvFile = 'orders_type_A_' . $userId . '_' . time() . '.csv';
-                    $fileHandle = fopen($csvFile, 'w');
-                    if ($fileHandle !== false) {
-                        fputcsv($fileHandle, ['ID', 'Type', 'Amount', 'Flag', 'Status', 'Priority']);
-
-                        fputcsv($fileHandle, [
-                            $order->id,
-                            $order->type,
-                            $order->amount,
-                            $order->flag ? 'true' : 'false',
-                            $order->status,
-                            $order->priority
-                        ]);
-
-                        if ($order->amount > 150) {
-                            fputcsv($fileHandle, ['', '', '', '', 'Note', 'High value order']);
-                        }
-
-                        fclose($fileHandle);
-                        $order->status = 'exported';
-                    } else {
-                        $order->status = 'export_failed';
-                    }
-                    break;
-
-                case 'B':
-                    try {
-                        $apiResponse = $this->apiClient->callAPI($order->id);
-
-                        if ($apiResponse->status === 'success') {
-                            if ($apiResponse->data >= 50 && $order->amount < 100) {
-                                $order->status = 'processed';
-                            } elseif ($apiResponse->data < 50 || $order->flag) {
-                                $order->status = 'pending';
-                            } else {
-                                $order->status = 'error';
-                            }
-                        } else {
-                            $order->status = 'api_error';
-                        }
-                    } catch (APIException $e) {
-                        $order->status = 'api_failure';
-                    }
-                    break;
-
-                case 'C':
-                    if ($order->flag) {
-                        $order->status = 'completed';
-                    } else {
-                        $order->status = 'in_progress';
-                    }
-                    break;
-
-                default:
-                    $order->status = 'unknown_type';
-                    break;
-            }
-
-            if ($order->amount > 200) {
-                $order->priority = 'high';
-            } else {
-                $order->priority = 'low';
-            }
-
-            try {
-                $this->dbService->updateOrderStatus($order->id, $order->status, $order->priority);
-            } catch (DatabaseException $e) {
-                $order->status = 'db_error';
-            }
+            $this->setOrderPriority($order);
+            $this->processOrderByType($order);
+            $this->updateOrderInDatabase($order);
         }
+
         return $orders;
+    }
+
+    private function setOrderPriority(Order $order): void
+    {
+        if ($order->amount > 200) {
+            $order->priority = 'high';
+        } else {
+            $order->priority = 'low';
+        }
+    }
+
+    private function processOrderByType(Order $order): void
+    {
+        switch ($order->type) {
+            case 'A':
+                $this->typeAProcessor->process($order);
+                break;
+            case 'B':
+                $this->typeBProcessor->process($order);
+                break;
+            case 'C':
+                $this->typeCProcessor->process($order);
+                break;
+            default:
+                $order->status = 'unknown_type';
+                break;
+        }
+    }
+
+    private function updateOrderInDatabase(Order $order): void
+    {
+        try {
+            $this->dbService->updateOrderStatus($order->id, $order->status, $order->priority);
+        } catch (DatabaseException $e) {
+            $order->status = 'db_error';
+        }
     }
 }

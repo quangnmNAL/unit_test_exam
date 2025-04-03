@@ -98,9 +98,6 @@ class OrderProcessingServiceTest extends TestCase
         $result = $this->orderProcessingService->processOrders(1);
 
         // Assert
-        if ($result === false) {
-            $this->fail('processOrders returned false instead of an array');
-        }
         $this->assertIsArray($result);
         $this->assertCount(1, $result);
         $this->assertEquals('processed', $result[0]->status);
@@ -132,9 +129,6 @@ class OrderProcessingServiceTest extends TestCase
         $result = $this->orderProcessingService->processOrders(1);
 
         // Assert
-        if ($result === false) {
-            $this->fail('processOrders returned false instead of an array');
-        }
         $this->assertIsArray($result);
         $this->assertCount(1, $result);
         $this->assertEquals('pending', $result[0]->status);
@@ -197,9 +191,6 @@ class OrderProcessingServiceTest extends TestCase
         $result = $this->orderProcessingService->processOrders(1);
 
         // Assert
-        if ($result === false) {
-            $this->fail('processOrders returned false instead of an array');
-        }
         $this->assertIsArray($result);
         $this->assertCount(1, $result);
         $this->assertEquals('api_error', $result[0]->status);
@@ -223,9 +214,6 @@ class OrderProcessingServiceTest extends TestCase
         $result = $this->orderProcessingService->processOrders(1);
 
         // Assert
-        if ($result === false) {
-            $this->fail('processOrders returned false instead of an array');
-        }
         $this->assertIsArray($result);
         $this->assertCount(1, $result);
         $this->assertEquals('completed', $result[0]->status);
@@ -249,9 +237,6 @@ class OrderProcessingServiceTest extends TestCase
         $result = $this->orderProcessingService->processOrders(1);
 
         // Assert
-        if ($result === false) {
-            $this->fail('processOrders returned false instead of an array');
-        }
         $this->assertIsArray($result);
         $this->assertCount(1, $result);
         $this->assertEquals('in_progress', $result[0]->status);
