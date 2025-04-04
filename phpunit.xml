@@ -1,23 +1,27 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<phpunit bootstrap="vendor/autoload.php"
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/10.0/phpunit.xsd"
+         bootstrap="vendor/autoload.php"
          colors="true"
-         stopOnFailure="false">
+         cacheDirectory=".phpunit.cache"
+         executionOrder="random"
+         failOnWarning="true"
+         failOnRisky="true">
     <testsuites>
-        <testsuite name="Test Suite">
+        <testsuite name="default">
             <directory>tests</directory>
         </testsuite>
     </testsuites>
-    <coverage>
-        <report>
-            <html outputDirectory="coverage"/>
-        </report>
-    </coverage>
     <source>
         <include>
             <directory suffix=".php">src</directory>
         </include>
-        <exclude>
-            <directory suffix=".php">tests</directory>
-        </exclude>
     </source>
+    <coverage>
+        <report>
+            <html outputDirectory="coverage/html"/>
+            <xml outputDirectory="coverage"/>
+            <text outputFile="php://stdout" showUncoveredFiles="true"/>
+        </report>
+    </coverage>
 </phpunit> 

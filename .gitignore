@@ -5,7 +5,8 @@
 *.sublime-workspace
 
 # Coverage reports
-coverage/
+# coverage/
+.phpunit.cache/
 .phpunit.result.cache
 
 # Composer
